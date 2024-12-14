@@ -89,7 +89,111 @@ Community Support: A platform (e.g., forum or chat) for users to share experienc
 ## System Architecture
 ![Screenshot 2024-10-29 025421](https://github.com/user-attachments/assets/dc965d7c-d4c1-488d-a5e3-aa05c825b630)
 
+## Program
+~~~
+import tensorflow as tf
+#import tensorflow_hub as hub
+from tensorflow.keras import layers, models
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing import image
+import numpy as np
+from flask import Flask, request, render_template, redirect
+import os
+import cv2
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+
+app = Flask(_name_)
+
+# Path where uploaded images will be saved
+UPLOAD_FOLDER = 'static/uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Ensure the upload folder exists
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+# Load pre-trained model
+model_ef = load_model("model_eff.h5")
+
+# Class names
+class_names = ['Rust and Scab Disease', 'Health Leaf', 'Rust Disease', 'Scab Disease']
+
+# Function to preprocess and predict the uploaded image
+def predict_image(image_path, model, class_names):
+    img = load_img(image_path, target_size=(224, 224))
+    img_array = img_to_array(img)
+    img_array = np.expand_dims(img_array, axis=0)
+    
+    predictions = model.predict(img_array)
+    predicted_class_index = np.argmax(predictions[0])
+    predicted_class_name = class_names[predicted_class_index]
+    
+    return predicted_class_name, predictions[0]
+
+@app.route('/')
+def index():
+    return render_template('upload.html')
+
+a=[]
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return redirect(request.url)
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return redirect(request.url)
+
+    if file:
+        # Save the uploaded image with a fixed name to overwrite previous one
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'original.jpg')
+        file.save(filepath)
+
+        # Predict the image class
+        predicted_class, probabilities = predict_image(filepath, model_ef, class_names)
+        a.append(predicted_class)
+        print(a)
+
+        return render_template('upload.html', image_path=filepath, predicted_class=predicted_class, probabilities=probabilities)
+
+# Segmentation logic
+def segment_image(image_path):
+    image = cv2.imread(image_path)
+    
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    lower_green = np.array([40, 40, 40])
+    upper_green = np.array([70, 255, 255])
+    
+    mask = cv2.inRange(hsv, lower_green, upper_green)
+    segmented_image = cv2.bitwise_and(image, image, mask=mask)
+    
+    # Save the segmented image with a fixed name to overwrite previous one
+    segmented_image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'segmented_image.jpg')
+    cv2.imwrite(segmented_image_path, segmented_image)
+    
+    return segmented_image_path
+
+@app.route('/segment')
+def segment():
+    image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'original.jpg')
+    
+    if os.path.exists(image_path):
+        # Perform segmentation
+        segmented_image_path = segment_image(image_path)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'original.jpg')
+        
+        return render_template('upload.html', segmented_image_path=segmented_image_path,image_path=filepath,predicted_class=a[-1])
+    
+    return redirect('/')
+
+if _name_ == '_main_':
+    app.run(port=1000, debug=False)
+~~~
+
 ## Output
+![Screenshot 2024-12-14 224933](https://github.com/user-attachments/assets/ac9c995c-c376-4be4-8b70-964d202d28ac)
+![Screenshot 2024-12-14 224955](https://github.com/user-attachments/assets/527f0346-3817-4505-b1b7-6d31f3610915)
 
 #### Output1 - Sample output of the pre-processing stage. 
 ![Screenshot 2024-10-29 030012](https://github.com/user-attachments/assets/2b3adedd-6dbd-4bf1-9b71-6cc30d3fede8)
